@@ -58,7 +58,7 @@ def init_prompts():
 
 
 def get_uids():
-    return [resp['user_id'] for resp in execute_select_query('SELECT DISTINCT user_id FROM prompts')]
+    return [resp['user_id'] for resp in execute_select_query('SELECT DISTINCT user_id FROM users')]
 
 
 def get_session_context(uid, sid):
@@ -72,23 +72,23 @@ def insert_data(table, *args):
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
     if table == 'prompts':
-        sql = '''INSERT 
-                    INTO ? (user_id, session_id, role, content, tokens) 
+        sql = f'''INSERT 
+                    INTO {table} (user_id, session_id, role, content, tokens) 
                     VALUES (?, ?, ?, ?, ?)'''
         user_id, session_id, role, content, tokens = args
-        cursor.execute(sql, (table, user_id, session_id, role, content, tokens))
+        cursor.execute(sql, (user_id, session_id, role, content, tokens))
     elif table == 'users':
-        sql = '''INSERT 
-                    INTO ? (user_id, sessions_total, admin, tokens_per_session) 
+        sql = f'''INSERT 
+                    INTO {table} (user_id, sessions_total, admin, tokens_per_session) 
                     VALUES (?, ?, ?, ?)'''
         user_id, session_total, admin, tokens_per_session = args
-        cursor.execute(sql, (table, user_id, session_total, admin, tokens_per_session))
+        cursor.execute(sql, (user_id, session_total, admin, tokens_per_session))
 
     else:
-        sql = '''INSERT 
-                    INTO ? (user_id, session_id)
+        sql = f'''INSERT 
+                    INTO {table} (user_id, session_id)
                     VALUES (?, ?)'''
-        user_id, session_id, setting, genre, additional = args
+        user_id, session_id = args
         cursor.execute(sql, (user_id, session_id))
     conn.commit()
     cursor.close()
@@ -102,9 +102,25 @@ def execute_changing_query(query, data):
     cursor.execute(query, data)
 
 
-def get_user_data(user_id: int):
-    res = execute_select_query('SELECT * FROM users WHERE user_id = ?', (user_id,))
+def get_user_data(uid: int):
+    res = execute_select_query('SELECT * FROM users WHERE user_id = ?', (uid,))
     return res if res else []
+
+
+def get_sessions_with_ids(uid):
+    response = execute_select_query('''SELECT 
+                                                    session_id, genre, additional, setting 
+                                                FROM 
+                                                    sessions 
+                                                WHERE 
+                                                    user_id = ?''', (uid,))
+    ic(response)
+    if len(response) > 1:
+        return [{resp['session_id']: [resp['genre'], resp['additional'], resp['setting']]} for resp in response]
+    else:
+        return {
+            response[0]['session_id']: [response[0]['genre'], response[0]['additional'], response[0]['setting']]
+        } if response else {}
 
 
 def get_sessions(uid):
@@ -128,16 +144,15 @@ def get_session_tokens(user_id: int):
 
 
 def update(uid, table, column, value):
-    conn = sqlite3.connect('users.db')
-    conn.row_factory = sqlite3.Row
+    conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
-    logging.debug('connected to users.db successfully')
-    sql = '''UPDATE ?
+    logging.debug('connected to proj.db successfully')
+    sql = f'''UPDATE {table}  
                 SET 
-                    ? = ?
+                    {column} = ?
                 WHERE
-                    user_id = ?'''
-    cursor.execute(sql, (column, value, uid))
+                    user_id = ?'''  # знаю, что небезопасно, но все равно table и column только я подставляю в коде
+    cursor.execute(sql, (value, uid))
     conn.commit()
     conn.close()
 

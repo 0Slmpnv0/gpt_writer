@@ -34,21 +34,29 @@ class User:
     def __init__(self, uid: int):
         global users
         self.uid = uid
-        self.active_sessions: list[Session] = []
+        self.active_sessions: dict[int: Session] = {}
         self.total_sessions = 0
         self.current_session: Session | None = None
         users[uid] = self
 
-    def add_session(self):
-        self.total_sessions += 1
-        if self.total_sessions <= 3:
-            db.update('users', self.uid, 'sessions_total', self.total_sessions)
-            self.active_sessions.append(
-                Session(
+    def add_old_session(self, genre, setting, additional, session_id):
+        self.active_sessions[session_id] = Session(
                     session_id=len(self.active_sessions) + 1,
                     uid=self.uid,
                     fid=folder_id,
-                ))
+                    genre=genre,
+                    setting=setting,
+                    additional=additional
+        )
+
+    def add_new_session(self):
+        self.total_sessions += 1
+        if self.total_sessions <= 3:
+            db.update(self.uid, 'users', 'sessions_total', self.total_sessions)
+            self.active_sessions[len(self.active_sessions) + 1] = Session(
+                    session_id=len(self.active_sessions) + 1,
+                    uid=self.uid,
+                    fid=folder_id)
         else:
             self.total_sessions -= 1
             logging.exception(f'Too many sessions for user {self.uid}')
@@ -56,7 +64,7 @@ class User:
 
     def add_tokens(self, tokens: int):
         tokens_per_session = round(tokens / len(self.active_sessions))
-        for session in self.active_sessions:
+        for session in self.active_sessions.items():
             session.tokens += tokens_per_session
         db.execute_changing_query('''UPDATE users SET tokens_per_session = ? WHERE user_id = ?''',
                                   (1500+tokens_per_session, self.uid, ))
@@ -72,7 +80,11 @@ class Session:
                  fid: str,
                  initial_tokens: int = 1500,
                  max_model_resp_tokens=200,
-                 temperature=1):
+                 temperature=1,
+                 setting='',
+                 additional='',
+                 genre=''
+                 ):
         self.session_id = session_id
         self.uid = uid
         self.folder_id = fid
@@ -80,13 +92,13 @@ class Session:
         self.temperature = temperature
         self.tokens = initial_tokens
         self.model_tokens = max_model_resp_tokens
-        self.setting = ''
-        self.additional = ''
-        self.genre = ''
+        self.setting = setting
+        self.additional = additional
+        self.genre = genre
         users[uid].current_session = self
 
     def add_context(self, context: list[dict[str: str]] | dict[str: str]):
-        if context is list:
+        if type(context) == list:
             self.context += context
         else:
             self.context.append(context)
@@ -127,7 +139,8 @@ class Session:
         sys_prompt = sys_prompts[resp_type]
         if self.additional:
             sys_prompt += f'Также пользователь попросил учесть: {self.additional}'
-        cont_prompt_size = ' '.join([prompt.items() for prompt in self.context])
+        ic(self.context)
+        cont_prompt_size = ' '.join([list(prompt.values())[0] for prompt in self.context])
         if self.count_tokens(prompt + sys_prompt + cont_prompt_size) > self.tokens:
             return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
                             f'У вас осталось {self.tokens - self.count_tokens("")} токенов, '
@@ -147,7 +160,7 @@ class Session:
             "messages": [{"role": "system", "text": sys_prompts[resp_type]}] + self.context + [{'role': 'user',
                                                                                                 'text': prompt}]
         }
-
+        ic(json)
         response = requests.post(
             'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
             headers=headers,
@@ -168,5 +181,5 @@ class Session:
 
     def harakiri(self):
         db.remove_session_context(self.uid, self.session_id)
-        users[self.uid].active_sessions.remove(self)
+        users[self.uid].active_sessions.pop(self.session_id)
         users[self.uid].add_tokens(self.tokens)
