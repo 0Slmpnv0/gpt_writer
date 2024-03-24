@@ -4,6 +4,7 @@ import requests
 from dotenv import get_key
 import logging
 import db
+from icecream import ic
 
 token_data = iam
 iam = token_data['access_token']
@@ -30,17 +31,18 @@ def check_iam():
 
 
 class User:
-    def __init__(self, uid):
+    def __init__(self, uid: int):
         global users
         self.uid = uid
         self.active_sessions: list[Session] = []
         self.total_sessions = 0
         self.current_session: Session | None = None
-        users.update({uid: self})
+        users[uid] = self
 
     def add_session(self):
         self.total_sessions += 1
-        if self.total_sessions < 3:
+        if self.total_sessions <= 3:
+            db.update('users', self.uid, 'sessions_total', self.total_sessions)
             self.active_sessions.append(
                 Session(
                     session_id=len(self.active_sessions) + 1,
@@ -53,9 +55,11 @@ class User:
             return 'exc'
 
     def add_tokens(self, tokens: int):
-        tokens_per_session = tokens / len(self.active_sessions)
+        tokens_per_session = round(tokens / len(self.active_sessions))
         for session in self.active_sessions:
             session.tokens += tokens_per_session
+        db.execute_changing_query('''UPDATE users SET tokens_per_session = ? WHERE user_id = ?''',
+                                  (1500+tokens_per_session, self.uid, ))
 
 
 users: dict[int: User] = {}
@@ -72,7 +76,7 @@ class Session:
         self.session_id = session_id
         self.uid = uid
         self.folder_id = fid
-        self.context: list[dict[str: str | int]] = []
+        self.context: list[dict[str: str]] = []
         self.temperature = temperature
         self.tokens = initial_tokens
         self.model_tokens = max_model_resp_tokens
@@ -80,6 +84,12 @@ class Session:
         self.additional = ''
         self.genre = ''
         users[uid].current_session = self
+
+    def add_context(self, context: list[dict[str: str]] | dict[str: str]):
+        if context is list:
+            self.context += context
+        else:
+            self.context.append(context)
 
     def count_tokens(self, text):
         current_tokens = db.get_session_tokens(self.uid)
@@ -104,7 +114,7 @@ class Session:
         return current_tokens
 
     def save_prompt(self, prompt):
-        db.insert_data(self.uid, self.session_id, prompt['role'], prompt['content'],
+        db.insert_data('prompts', self.uid, self.session_id, prompt['role'], prompt['content'],
                        self.count_tokens(prompt['content']))
 
     def ask_gpt(self, prompt, resp_type='продолжить'):
@@ -154,8 +164,9 @@ class Session:
             self.save_prompt({'role': 'assistant', 'content': text})
             if resp_type == 'завершить':
                 self.harakiri()
-            return text
+            return ['succ', text]
 
     def harakiri(self):
+        db.remove_session_context(self.uid, self.session_id)
         users[self.uid].active_sessions.remove(self)
         users[self.uid].add_tokens(self.tokens)
