@@ -33,22 +33,29 @@ class User:
     def __init__(self, uid):
         global users
         self.uid = uid
-        self.sessions: list[Session] = []
+        self.active_sessions: list[Session] = []
+        self.total_sessions = 0
+        self.current_session: Session | None = None
         users.update({uid: self})
 
     def add_session(self):
-        if db.get_sessions_quantity(self.uid):
-            self.sessions.append(
+        self.total_sessions += 1
+        if self.total_sessions < 3:
+            self.active_sessions.append(
                 Session(
-                    session_id=len(self.sessions) + 1,
+                    session_id=len(self.active_sessions) + 1,
                     uid=self.uid,
                     fid=folder_id,
                 ))
+        else:
+            self.total_sessions -= 1
+            logging.exception(f'Too many sessions for user {self.uid}')
+            return 'exc'
 
     def add_tokens(self, tokens: int):
-        tokens_per_session = tokens / len(self.sessions) - 1
-        for session in self.sessions:
-            session.increase_tokens(tokens_per_session)
+        tokens_per_session = tokens / len(self.active_sessions)
+        for session in self.active_sessions:
+            session.tokens += tokens_per_session
 
 
 users: dict[int: User] = {}
@@ -72,9 +79,7 @@ class Session:
         self.setting = ''
         self.additional = ''
         self.genre = ''
-
-    def increase_tokens(self, tokens):
-        self.tokens += tokens
+        users[uid].current_session = self
 
     def count_tokens(self, text):
         current_tokens = db.get_session_tokens(self.uid)
@@ -98,7 +103,7 @@ class Session:
             return len(tokens) + current_tokens
         return current_tokens
 
-    def add_prompt(self, prompt):
+    def save_prompt(self, prompt):
         db.insert_data(self.uid, self.session_id, prompt['role'], prompt['content'],
                        self.count_tokens(prompt['content']))
 
@@ -109,9 +114,11 @@ class Session:
                            f'Вот Пожелания пользователя: Жанр: {self.genre}; Сеттинг: {self.setting};'),
             'завершить': 'Заверши рассказ, который ты составил вместе с пользователем'
         }
+        sys_prompt = sys_prompts[resp_type]
         if self.additional:
-            sys_prompts['продолжить'] += f'Также пользователь попросил учесть: {self.additional}'
-        if self.count_tokens(prompt) > self.tokens:
+            sys_prompt += f'Также пользователь попросил учесть: {self.additional}'
+        cont_prompt_size = ' '.join([prompt.items() for prompt in self.context])
+        if self.count_tokens(prompt + sys_prompt + cont_prompt_size) > self.tokens:
             return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
                             f'У вас осталось {self.tokens - self.count_tokens("")} токенов, '
                             f'или примерно {(self.tokens - self.count_tokens('')) * 3} символов. Чтобы закончить')]
@@ -139,10 +146,16 @@ class Session:
 
         if response.status_code != 200:
             logging.error(f'GPT error code: {response.status_code}')
-            return ['err', f'Извините((. Произошла какая-то ошибка на стороне сервера. Код ошибки: {response.status_code})']
+            return ['err', f'Извините((. Произошла какая-то ошибка. Мы уже запомнили ее код и рано '
+                           f'или поздно починим(нет). Код ошибки: {response.status_code})',
+                    response.status_code]
         else:
-            return response.json()['result']['alternatives'][0]['message']['text']
+            text = response.json()['result']['alternatives'][0]['message']['text']
+            self.save_prompt({'role': 'assistant', 'content': text})
+            if resp_type == 'завершить':
+                self.harakiri()
+            return text
 
     def harakiri(self):
+        users[self.uid].active_sessions.remove(self)
         users[self.uid].add_tokens(self.tokens)
-        users[self.uid].sessions.remove(self)

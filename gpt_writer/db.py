@@ -39,11 +39,6 @@ def get_user_data(user_id: int):
     return res if res else []
 
 
-def get_sessions_quantity(user_id: int):
-    res = execute_query('SELECT DISTINCT * FROM prompts WHERE user_id = ?', (user_id, ))
-    return len(res) <= 5
-
-
 def get_session_tokens(user_id: int):
     res = execute_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id, ))
 
