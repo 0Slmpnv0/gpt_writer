@@ -52,7 +52,7 @@ class User:
     def add_new_session(self):
         self.total_sessions += 1
         if self.total_sessions <= 3:
-            db.update(self.uid, 'users', 'sessions_total', self.total_sessions)
+            db.update_users(self.uid, 'sessions_total', self.total_sessions)
             self.active_sessions[len(self.active_sessions) + 1] = Session(
                     session_id=len(self.active_sessions) + 1,
                     uid=self.uid,
@@ -126,19 +126,21 @@ class Session:
         return current_tokens
 
     def save_prompt(self, prompt):
-        db.insert_data('prompts', self.uid, self.session_id, prompt['role'], prompt['content'],
-                       self.count_tokens(prompt['content']))
+        db.insert_data('prompts', self.uid, self.session_id, prompt['role'], prompt['text'],
+                       self.count_tokens(prompt['text']))
 
     def ask_gpt(self, prompt, resp_type='продолжить'):
         sys_prompts = {
-            'продолжить': ('Ты - опытный сторителлер, и вместе с пользователем вы пишете рассказ. Ты можешь '
-                           'добавлять персонажей и диалоги, если это уместно, и пользователь не просил об обратном'
-                           f'Вот Пожелания пользователя: Жанр: {self.genre}; Сеттинг: {self.setting};'),
+            'продолжить': ('Ты - опытный сторителлер, и вместе с пользователем вы пишете рассказ. '
+                           'Твоя задача - продолжать повествование за пользователем, не надо ничего добавлять в начале.'
+                           ' Просто продолжай с того момента, где закончил пользователь. Ты можешь '
+                           'добавлять персонажей и диалоги, если это уместно, и пользователь не просил об обратном\n'
+                           f'Вот Пожелания пользователя: Жанр: {self.genre}\nСеттинг: {self.setting};'),
             'завершить': 'Заверши рассказ, который ты составил вместе с пользователем'
         }
         sys_prompt = sys_prompts[resp_type]
         if self.additional:
-            sys_prompt += f'Также пользователь попросил учесть: {self.additional}'
+            sys_prompt += f'\nТакже пользователь попросил учесть: {self.additional}'
         ic(self.context)
         cont_prompt_size = ' '.join([list(prompt.values())[0] for prompt in self.context])
         if self.count_tokens(prompt + sys_prompt + cont_prompt_size) > self.tokens:
@@ -160,21 +162,23 @@ class Session:
             "messages": [{"role": "system", "text": sys_prompts[resp_type]}] + self.context + [{'role': 'user',
                                                                                                 'text': prompt}]
         }
-        ic(json)
+        self.context.append({'role': 'user', 'text': prompt})
+        print(json)
         response = requests.post(
             'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
             headers=headers,
             json=json
         )
-
+        print(response.json())
         if response.status_code != 200:
             logging.error(f'GPT error code: {response.status_code}')
             return ['err', f'Извините((. Произошла какая-то ошибка. Мы уже запомнили ее код и рано '
-                           f'или поздно починим(нет). Код ошибки: {response.status_code})',
+                           f'или поздно починим(нет). Код ошибки: {response.status_code}',
                     response.status_code]
         else:
             text = response.json()['result']['alternatives'][0]['message']['text']
-            self.save_prompt({'role': 'assistant', 'content': text})
+            self.save_prompt({'role': 'assistant', 'text': text})
+            self.context.append({'role': 'assistant', 'text': text})
             if resp_type == 'завершить':
                 self.harakiri()
             return ['succ', text]

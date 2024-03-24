@@ -143,15 +143,30 @@ def get_session_tokens(user_id: int):
     res = execute_select_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
 
 
-def update(uid, table, column, value):
+def update_sessions(uid, column, value, sid):
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
-    sql = f'''UPDATE {table}  
+    sql = f'''UPDATE sessions  
                 SET 
                     {column} = ?
                 WHERE
-                    user_id = ?'''  # знаю, что небезопасно, но все равно table и column только я подставляю в коде
+                    user_id = ? AND session_id = ?'''  # знаю, что небезопасно,
+                                                       # но все равно column только я подставляю в коде
+    cursor.execute(sql, (value, uid, sid))
+    conn.commit()
+    conn.close()
+
+
+def update_users(uid, column, value):
+    conn = sqlite3.connect('proj.db')
+    cursor = conn.cursor()
+    logging.debug('connected to proj.db successfully')
+    sql = f'''UPDATE users  
+                SET 
+                    {column} = ?
+                WHERE
+                    user_id = ?'''
     cursor.execute(sql, (value, uid))
     conn.commit()
     conn.close()
