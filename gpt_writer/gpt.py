@@ -29,8 +29,10 @@ def check_iam():
 
 class User:
     def __init__(self, uid):
+        global users
         self.uid = uid
-        self.sessions: list[dict[str: int | str]] = []
+        self.sessions: list[Session] = []
+        users.update({uid: self})
 
     def add_session(self):
         if db.get_sessions_quantity(self.uid):
@@ -41,20 +43,37 @@ class User:
                     fid=folder_id,
                 ))
 
+    def add_tokens(self, tokens: int):
+        tokens_per_session = tokens / len(self.sessions) - 1
+        for session in self.sessions:
+            session.increase_tokens(tokens_per_session)
+
+
+users: dict[int: User] = {}
+
 
 class Session:
     def __init__(self,
                  session_id: int,
                  uid: int,
                  fid: str,
-                 max_tokens: int = 1000,
+                 initial_tokens: int = 1500,
+                 max_model_resp_tokens=100,
                  temperature=1):
+        super().__init__(uid)
         self.session_id = session_id
         self.uid = uid
         self.folder_id = fid
         self.context: list[dict[str: str | int]] = []
         self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.tokens = initial_tokens
+        self.model_tokens = max_model_resp_tokens
+        self.setting = ''
+        self.additional = ''
+        self.genre = ''
+
+    def increase_tokens(self, tokens):
+        self.tokens += tokens
 
     def count_tokens(self, text):
         current_tokens = db.get_session_tokens(self.uid)
@@ -64,16 +83,31 @@ class Session:
         }
         data = {
             "modelUri": f"gpt://{folder_id}/yandexgpt/latest",
-            "maxTokens": self.max_tokens,
+            "maxTokens": self.model_tokens,
             "text": text
         }
-        tokens = requests.post(
-            "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
-            json=data,
-            headers=headers
-        ).json()['tokens']
-        return tokens + current_tokens
+        if text:
+            tokens = requests.post(
+                "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
+                json=data,
+                headers=headers
+            ).json()['tokens']
+            return tokens + current_tokens
+        return current_tokens
 
     def add_prompt(self, prompt):
         db.insert_data(self.uid, self.session_id, prompt['role'], prompt['content'],
                        self.count_tokens(prompt['content']))
+
+    def ask_gpt(self, prompt, resp_type=''):
+        sys_prompts = {
+            'продолжить': 'Вместе с пользователем вы пишете историю с персонажами: '
+        }
+        if self.count_tokens(prompt) < self.tokens:
+            return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
+                            f'У вас осталось {self.tokens - self.count_tokens("")}, '
+                            f'или примерно {(self.tokens - self.count_tokens('')) * 3} символов. Чтобы закончить')]
+
+    def harakiri(self):
+        users[self.uid].add_tokens(self.tokens)
+        users[self.uid].sessions.remove(self)
