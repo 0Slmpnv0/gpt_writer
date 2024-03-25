@@ -110,7 +110,6 @@ def get_sessions_with_ids(uid):
                                                     sessions 
                                                 WHERE 
                                                     user_id = ?''', (uid,))
-    ic(response)
     if len(response) > 1:
         return [{resp['session_id']: [resp['genre'], resp['additional'], resp['setting']]} for resp in response]
     else:
@@ -128,7 +127,6 @@ def remove_session_context(uid, sid):
 
 def get_session_tokens(user_id: int):
     res = execute_select_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
-    ic(res)
     return res[0]['tokens']
 
 
@@ -166,11 +164,7 @@ def execute_select_query(query, data=()) -> list:
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
-    ic(query)
-    ic(data)
     if data:
-        ic([dict(res) for res in cursor.execute(query, data)])
         return [dict(res) for res in cursor.execute(query, data)]
     else:
-        ic([dict(res) for res in cursor.execute(query)])
         return [dict(res) for res in cursor.execute(query)]

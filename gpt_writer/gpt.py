@@ -1,5 +1,4 @@
 import time
-from conspiracy import iam
 import requests
 from dotenv import get_key
 import logging
@@ -133,9 +132,7 @@ class Session:
             sys_prompt += f'\nТакже пользователь попросил учесть: {self.additional}'
         context_prompt_size = ''.join([prompt['text'] for prompt in self.context])
         if not self.context:
-            ic(self.tokens)
             self.tokens -= self.count_tokens(sys_prompt)
-            ic(self.tokens)
         if self.count_tokens(prompt + context_prompt_size) > self.tokens:
             if self.count_tokens(context_prompt_size) > self.tokens:
                 self.harakiri()
@@ -144,9 +141,7 @@ class Session:
             return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
                             f'У вас осталось {self.tokens - self.tokens} токенов, '
                             f'или примерно {(self.tokens - self.tokens) * 3} символов. Чтобы закончить')]
-        ic(self.tokens)
         self.tokens -= self.count_tokens(prompt + context_prompt_size)
-        ic(self.tokens)
         # check_iam()
         headers = {
             'Authorization': f'Bearer {iam}',
@@ -163,7 +158,6 @@ class Session:
                                                                                                 'text': prompt}]
         }
         self.context.append({'role': 'user', 'text': prompt})
-        print(json)
         response = requests.post(
             'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
             headers=headers,
@@ -176,8 +170,6 @@ class Session:
                     response.status_code]
         else:
             text = response.json()['result']['alternatives'][0]['message']['text']
-            ic(self.tokens)
-            ic(self.tokens)
             self.save_prompt({'role': 'assistant', 'text': text})
             self.context.append({'role': 'assistant', 'text': text})
             if resp_type == 'завершить':

@@ -15,16 +15,12 @@ db.init_sessions()
 db.init_users()
 db.init_prompts()
 uids = db.get_uids()
-ic(uids)
 for uid in uids:
     User(uid)
     sessions = db.get_sessions_with_ids(uid)
-    ic(sessions)
     if type(sessions) == list:
         for session in sessions:
             if session:
-                ic(session)
-                ic(list(session.values())[0])
                 sid = list(session.keys())[0]
                 genre, additional, setting = list(session.values())[0]
                 users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
@@ -35,8 +31,6 @@ for uid in uids:
             else:
                 continue
     else:
-        ic(sessions)
-        ic(list(sessions.values())[0])
         sid = list(sessions.keys())[0]
         genre, additional, setting = list(sessions.values())[0]
         users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
@@ -52,7 +46,6 @@ def send_welcome(message: Message):
                 'писать сценарий на заданную вами тему. Всего вам будет доступно три сессии. '
                 'Чтобы начать новую сессию используйте /new_story')
         if message.from_user.id not in users.keys():
-            ic(users)
             User(message.from_user.id)
             bot.send_message(message.from_user.id, text, reply_markup=build_reply_kb(['/new_story']))
         else:
