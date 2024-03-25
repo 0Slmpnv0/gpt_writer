@@ -176,6 +176,7 @@ def handle_continue(message: Message):
     elif message.text[0] == '/':
         bot.send_message(message.chat.id, 'Сейчас вы не можете применять никакие команды кроме '
                                           '/finish чтобы нейросеть завершила рассказ после вашей части')
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
     else:
         handle_story(message)
 
@@ -195,6 +196,7 @@ def handle_finish(message: Message):
             logging.error(f'Error: {resp[2]}')
             bot.register_next_step_handler_by_chat_id(message.chat.id)
         case 'succ':
+            users[message.from_user.id].current_session.harakiri()
             logging.info(f'Response successful')
 
     bot.send_message(message.from_user.id, resp[1])

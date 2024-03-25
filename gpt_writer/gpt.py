@@ -41,6 +41,7 @@ class User:
         users[uid] = self
 
     def add_old_session(self, genre, setting, additional, session_id, tokens=1500):
+        self.total_sessions += 1
         self.active_sessions[session_id] = Session(
                     session_id=len(self.active_sessions) + 1,
                     uid=self.uid,
@@ -99,6 +100,7 @@ class Session:
             self.context.append(context)
 
     def count_tokens(self, text):
+        ic(text)
         headers = {
             'Authorization': f'Bearer {iam}',
             'Content-Type': 'application/json'
@@ -108,11 +110,13 @@ class Session:
             "maxTokens": self.model_tokens,
             "text": text
         }
+        ic(data)
         tokens = requests.post(
             "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
             json=data,
             headers=headers
         ).json()['tokens']
+        ic(tokens)
         return len(tokens)
 
     def save_prompt(self, prompt):
@@ -136,6 +140,8 @@ class Session:
         if not self.context:
             self.tokens -= self.count_tokens(sys_prompt)
         if self.count_tokens(prompt + context_prompt_size) > self.tokens:
+            ic(len(context_prompt_size))
+            ic(self.context)
             if self.count_tokens(context_prompt_size) > self.tokens:
                 self.harakiri()
                 return ['exc1', 'Извините, ваш рассказ получился слишком длинным, чтобы его продолжить.'
@@ -180,4 +186,5 @@ class Session:
 
     def harakiri(self):
         db.remove_session_context(self.uid, self.session_id)
+        ic(users[self.uid].active_sessions)
         users[self.uid].active_sessions.pop(self.session_id)

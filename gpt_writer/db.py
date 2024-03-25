@@ -123,6 +123,9 @@ def remove_session_context(uid, sid):
     cursor = conn.cursor()
     sql = 'DELETE FROM prompts WHERE user_id = ? AND session_id = ?'
     cursor.execute(sql, (uid, sid))
+    conn.commit()
+    conn.close()
+
 
 
 def get_session_tokens(user_id: int):
@@ -165,6 +168,12 @@ def execute_select_query(query, data=()) -> list:
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
     if data:
-        return [dict(res) for res in cursor.execute(query, data)]
+        ret = [dict(res) for res in cursor.execute(query, data)]
+        conn.commit()
+        conn.close()
+        return ret
     else:
-        return [dict(res) for res in cursor.execute(query)]
+        ret = [dict(res) for res in cursor.execute(query)]
+        conn.commit()
+        conn.close()
+        return ret
