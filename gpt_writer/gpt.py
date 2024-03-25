@@ -39,14 +39,15 @@ class User:
         self.current_session: Session | None = None
         users[uid] = self
 
-    def add_old_session(self, genre, setting, additional, session_id):
+    def add_old_session(self, genre, setting, additional, session_id, tokens=1500):
         self.active_sessions[session_id] = Session(
                     session_id=len(self.active_sessions) + 1,
                     uid=self.uid,
                     fid=folder_id,
                     genre=genre,
                     setting=setting,
-                    additional=additional
+                    additional=additional,
+                    initial_tokens=tokens
         )
 
     def add_new_session(self):
@@ -61,13 +62,6 @@ class User:
             self.total_sessions -= 1
             logging.exception(f'Too many sessions for user {self.uid}')
             return 'exc'
-
-    def add_tokens(self, tokens: int):
-        tokens_per_session = round(tokens / len(self.active_sessions))
-        for session in self.active_sessions.items():
-            session.tokens += tokens_per_session
-        db.execute_changing_query('''UPDATE users SET tokens_per_session = ? WHERE user_id = ?''',
-                                  (1500+tokens_per_session, self.uid, ))
 
 
 users: dict[int: User] = {}
@@ -104,9 +98,6 @@ class Session:
             self.context.append(context)
 
     def count_tokens(self, text):
-        current_tokens = db.get_session_tokens(self.uid)
-        if not current_tokens:
-            current_tokens = 0
         headers = {
             'Authorization': f'Bearer {iam}',
             'Content-Type': 'application/json'
@@ -116,18 +107,17 @@ class Session:
             "maxTokens": self.model_tokens,
             "text": text
         }
-        if text:
-            tokens = requests.post(
-                "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
-                json=data,
-                headers=headers
-            ).json()['tokens']
-            return len(tokens) + current_tokens
-        return current_tokens
+        tokens = requests.post(
+            "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
+            json=data,
+            headers=headers
+        ).json()['tokens']
+        return len(tokens)
 
     def save_prompt(self, prompt):
+        self.tokens -= self.count_tokens(prompt['text'])
         db.insert_data('prompts', self.uid, self.session_id, prompt['role'], prompt['text'],
-                       self.count_tokens(prompt['text']))
+                       self.tokens)
 
     def ask_gpt(self, prompt, resp_type='продолжить'):
         sys_prompts = {
@@ -141,12 +131,22 @@ class Session:
         sys_prompt = sys_prompts[resp_type]
         if self.additional:
             sys_prompt += f'\nТакже пользователь попросил учесть: {self.additional}'
-        ic(self.context)
-        cont_prompt_size = ' '.join([list(prompt.values())[0] for prompt in self.context])
-        if self.count_tokens(prompt + sys_prompt + cont_prompt_size) > self.tokens:
+        context_prompt_size = ''.join([prompt['text'] for prompt in self.context])
+        if not self.context:
+            ic(self.tokens)
+            self.tokens -= self.count_tokens(sys_prompt)
+            ic(self.tokens)
+        if self.count_tokens(prompt + context_prompt_size) > self.tokens:
+            if self.count_tokens(context_prompt_size) > self.tokens:
+                self.harakiri()
+                return ['exc', 'Извините, ваш рассказ получился слишком длинным, чтобы его продолжить.'
+                               ' Чтобы создать новый можете использовать /new_story']
             return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
-                            f'У вас осталось {self.tokens - self.count_tokens("")} токенов, '
-                            f'или примерно {(self.tokens - self.count_tokens('')) * 3} символов. Чтобы закончить')]
+                            f'У вас осталось {self.tokens - self.tokens} токенов, '
+                            f'или примерно {(self.tokens - self.tokens) * 3} символов. Чтобы закончить')]
+        ic(self.tokens)
+        self.tokens -= self.count_tokens(prompt + context_prompt_size)
+        ic(self.tokens)
         # check_iam()
         headers = {
             'Authorization': f'Bearer {iam}',
@@ -169,7 +169,6 @@ class Session:
             headers=headers,
             json=json
         )
-        print(response.json())
         if response.status_code != 200:
             logging.error(f'GPT error code: {response.status_code}')
             return ['err', f'Извините((. Произошла какая-то ошибка. Мы уже запомнили ее код и рано '
@@ -177,6 +176,8 @@ class Session:
                     response.status_code]
         else:
             text = response.json()['result']['alternatives'][0]['message']['text']
+            ic(self.tokens)
+            ic(self.tokens)
             self.save_prompt({'role': 'assistant', 'text': text})
             self.context.append({'role': 'assistant', 'text': text})
             if resp_type == 'завершить':
@@ -186,4 +187,3 @@ class Session:
     def harakiri(self):
         db.remove_session_context(self.uid, self.session_id)
         users[self.uid].active_sessions.pop(self.session_id)
-        users[self.uid].add_tokens(self.tokens)

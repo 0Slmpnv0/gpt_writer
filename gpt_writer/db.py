@@ -4,11 +4,27 @@ import sqlite3
 from icecream import ic
 
 
+def init_users():
+    conn = sqlite3.connect('proj.db')
+    cursor = conn.cursor()
+
+    users_init = '''CREATE TABLE IF NOT EXISTS users(
+    user_id INTEGER,
+    sessions_total INTEGER, 
+    admin INTEGER, 
+    tokens_per_session INTEGER
+    );'''
+    cursor.execute(users_init)
+    conn.commit()
+    cursor.close()
+    logging.debug('users table initiated')
+
+
 def init_sessions():
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
 
-    users_init = '''CREATE TABLE IF NOT EXISTS sessions(
+    sessions_init = '''CREATE TABLE IF NOT EXISTS sessions(
             id INTEGER PRIMARY KEY,
             user_id INTEGER,
             session_id INTEGER,
@@ -16,27 +32,10 @@ def init_sessions():
             setting TEXT,
             additional TEXT
             );'''
-    cursor.execute(users_init)
+    cursor.execute(sessions_init)
     conn.commit()
     cursor.close()
     logging.debug('sessions table initiated')
-
-
-def init_users():
-    conn = sqlite3.connect('proj.db')
-    cursor = conn.cursor()
-
-    users_init = '''CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY,
-        user_id INTEGER,
-        sessions_total INTEGER,
-        admin INTEGER,
-        tokens_per_session INTEGER
-        );'''
-    cursor.execute(users_init)
-    conn.commit()
-    cursor.close()
-    logging.debug('users table initiated')
 
 
 def init_prompts():
@@ -48,7 +47,7 @@ def init_prompts():
     user_id INTEGER,
     session_id INTEGER,
     role TEXT,
-    content TEXT,
+    text TEXT,
     tokens INTEGER
     );'''
     cursor.execute(prompts_init)
@@ -58,11 +57,11 @@ def init_prompts():
 
 
 def get_uids():
-    return [resp['user_id'] for resp in execute_select_query('SELECT DISTINCT user_id FROM users')]
+    return [resp['user_id'] for resp in execute_select_query('SELECT DISTINCT user_id FROM sessions')]
 
 
 def get_session_context(uid, sid):
-    return execute_select_query('SELECT role, content FROM prompts where user_id = ? and session_id = ? ORDER BY id',
+    return execute_select_query('SELECT role, text FROM prompts where user_id = ? and session_id = ? ORDER BY id',
                                 (uid, sid))
 
 
@@ -73,7 +72,7 @@ def insert_data(table, *args):
     logging.debug('connected to proj.db successfully')
     if table == 'prompts':
         sql = f'''INSERT 
-                    INTO {table} (user_id, session_id, role, content, tokens) 
+                    INTO {table} (user_id, session_id, role, text, tokens) 
                     VALUES (?, ?, ?, ?, ?)'''
         user_id, session_id, role, content, tokens = args
         cursor.execute(sql, (user_id, session_id, role, content, tokens))
@@ -100,11 +99,8 @@ def execute_changing_query(query, data):
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
     cursor.execute(query, data)
-
-
-def get_user_data(uid: int):
-    res = execute_select_query('SELECT * FROM users WHERE user_id = ?', (uid,))
-    return res if res else []
+    conn.commit()
+    cursor.close()
 
 
 def get_sessions_with_ids(uid):
@@ -123,15 +119,6 @@ def get_sessions_with_ids(uid):
         } if response else {}
 
 
-def get_sessions(uid):
-    response = execute_select_query('SELECT DISTINCT session_id FROM prompts WHERE user_id = ?', (uid,))
-    ic(response)
-    if len(response) > 1:
-        return [resp['session_id'] for resp in response]
-    else:
-        return response[0]['session_id']
-
-
 def remove_session_context(uid, sid):
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
@@ -141,6 +128,8 @@ def remove_session_context(uid, sid):
 
 def get_session_tokens(user_id: int):
     res = execute_select_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    ic(res)
+    return res[0]['tokens']
 
 
 def update_sessions(uid, column, value, sid):

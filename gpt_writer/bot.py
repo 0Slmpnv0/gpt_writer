@@ -11,6 +11,9 @@ logging.basicConfig(filename='bot.log', level=logging.DEBUG)
 logging.debug('Bot startup initiated...')
 tg_token = get_key(".env", 'TELEGRAM_BOT_TOKEN')
 bot = TeleBot(tg_token)
+db.init_sessions()
+db.init_users()
+db.init_prompts()
 uids = db.get_uids()
 ic(uids)
 for uid in uids:
@@ -25,7 +28,7 @@ for uid in uids:
                 sid = list(session.keys())[0]
                 genre, additional, setting = list(session.values())[0]
                 users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                           additional=additional)
+                                           additional=additional, tokens=db.get_session_tokens(uid))
                 users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                                    users[uid].active_sessions[
                                                                                        sid].session_id))
@@ -37,7 +40,7 @@ for uid in uids:
         sid = list(sessions.keys())[0]
         genre, additional, setting = list(sessions.values())[0]
         users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                   additional=additional)
+                                   additional=additional, tokens=db.get_session_tokens(uid))
         users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                            users[uid].active_sessions[
                                                                                sid].session_id))
@@ -51,7 +54,6 @@ def send_welcome(message: Message):
         if message.from_user.id not in users.keys():
             ic(users)
             User(message.from_user.id)
-            db.insert_data('users', message.from_user.id, 0, 0, 1500)
             bot.send_message(message.from_user.id, text, reply_markup=build_reply_kb(['/new_story']))
         else:
             repl = ['/new_story']
@@ -116,7 +118,7 @@ def handle_jumping(message: Message):
 
             else:
                 bot.send_message(message.from_user.id, 'Вы уже можете отправлять свою часть')
-                bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
+                bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
 
     except:
         bot.send_message(message.from_user.id, 'Такой сессии нет. Пожалуйста, введите только ее номер без точки. '
@@ -142,17 +144,18 @@ def handle_genre(message: Message):
                                             'форму рассказа(стих? обычное повествование? решать вам.), и так далее. '
                                             'Можете попросить нейросеть не добавлять диалоги, '
                                             'или не добавлять своих персонажей. Главное - сделайте текст лаконичным. '
-                                            'Каждый токен на счету!'))
+                                            'Каждый токен на счету! Если вам больше нечего сказать, то ставьте -'))
     db.update_sessions(message.from_user.id, 'genre', message.text,
                        users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
 
 
 def handle_additional(message: Message):
-    users[message.from_user.id].current_session.additional = message.text
+    if message.text:
+        users[message.from_user.id].current_session.additional = message.text
+        db.update_sessions(message.from_user.id, 'additional', message.text,
+                           users[message.from_user.id].current_session.session_id)
     bot.send_message(message.from_user.id, 'Теперь вы можете ввести начало истории')
-    db.update_sessions(message.from_user.id, 'additional', message.text,
-                       users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
 
 
@@ -163,18 +166,18 @@ def handle_story(message: Message):
         case 'exc':
             logging.exception('Too big prompt')
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
-            return
         case 'err':
             logging.error(f'Error: {resp[2]}')
-            return
         case 'succ':
             logging.info(f'Response successful')
     bot.send_message(message.from_user.id, resp[1])
-    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
+    if resp[0] == 'succ':
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
 
 
 def handle_continue(message: Message):
     if message.text == '/finish':
+        bot.send_message(message.from_user.id, 'Отправьте свою часть истории')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_finish)
     elif message.text[0] == '/':
         bot.send_message(message.chat.id, 'Сейчас вы не можете применять никакие команды кроме '
@@ -188,12 +191,13 @@ def handle_finish(message: Message):
     match resp[0]:
         case 'exc':
             logging.exception('Too big prompt')
-            bot
+            return
         case 'err':
             logging.error(f'Error: {resp[2]}')
             bot.register_next_step_handler_by_chat_id(message.chat.id)
         case 'succ':
             logging.info(f'Response successful')
+
     bot.send_message(message.from_user.id, resp[1])
 
 
