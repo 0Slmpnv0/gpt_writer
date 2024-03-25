@@ -15,10 +15,6 @@ def create_new_iam_token():
     response = requests.get(metadata_url, headers=headers)
     return response.json()
 
-token_data = iam
-iam = token_data['access_token']
-expires_at = time.time() + token_data['expires_in']
-
 
 def check_iam():
     """checks if IAM token is not expired yet, and if it is, function calls create_new_token()"""
@@ -28,6 +24,11 @@ def check_iam():
         iam_data = create_new_iam_token()
         iam = iam_data['access_token']
         expires_at = iam_data['expires_in']
+
+
+token_data = create_new_iam_token()
+iam = token_data['access_token']
+expires_at = time.time() + token_data['expires_in']
 
 
 class User:
