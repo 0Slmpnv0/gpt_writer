@@ -127,7 +127,7 @@ def remove_session_context(uid, sid):
 
 def get_session_tokens(user_id: int):
     res = execute_select_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
-    return res[0]['tokens']
+    return res[0]['tokens'] if res else 0
 
 
 def update_sessions(uid, column, value, sid):

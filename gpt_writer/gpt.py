@@ -5,9 +5,6 @@ import logging
 import db
 from icecream import ic
 
-token_data = iam
-iam = token_data['access_token']
-expires_at = time.time() + token_data['expires_in']
 folder_id = get_key('.env', 'FOLDER_ID')
 
 
@@ -17,6 +14,10 @@ def create_new_iam_token():
     headers = {"Metadata-Flavor": "Google"}
     response = requests.get(metadata_url, headers=headers)
     return response.json()
+
+token_data = iam
+iam = token_data['access_token']
+expires_at = time.time() + token_data['expires_in']
 
 
 def check_iam():
@@ -136,13 +137,13 @@ class Session:
         if self.count_tokens(prompt + context_prompt_size) > self.tokens:
             if self.count_tokens(context_prompt_size) > self.tokens:
                 self.harakiri()
-                return ['exc', 'Извините, ваш рассказ получился слишком длинным, чтобы его продолжить.'
+                return ['exc1', 'Извините, ваш рассказ получился слишком длинным, чтобы его продолжить.'
                                ' Чтобы создать новый можете использовать /new_story']
-            return ['exc', (f'Извините, ваш запрос с учетом контекста слишком большой. '
+            return ['exc2', (f'Извините, ваш запрос с учетом контекста слишком большой. '
                             f'У вас осталось {self.tokens - self.tokens} токенов, '
-                            f'или примерно {(self.tokens - self.tokens) * 3} символов. Чтобы закончить')]
+                            f'или примерно {(self.tokens - self.tokens) * 3} символов чтобы закончить')]
         self.tokens -= self.count_tokens(prompt + context_prompt_size)
-        # check_iam()
+        check_iam()
         headers = {
             'Authorization': f'Bearer {iam}',
             'Content-Type': 'application/json'

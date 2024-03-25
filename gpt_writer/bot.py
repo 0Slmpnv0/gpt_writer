@@ -39,6 +39,7 @@ for uid in uids:
                                                                            users[uid].active_sessions[
                                                                                sid].session_id))
 
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message: Message):
     if message.text == '/start':
@@ -182,9 +183,14 @@ def handle_continue(message: Message):
 def handle_finish(message: Message):
     resp = users[message.from_user.id].current_session.ask_gpt(message.text, 'завершить')
     match resp[0]:
-        case 'exc':
-            logging.exception('Too big prompt')
+        case 'exc1':
+            logging.exception('Too small token amount for GPT resp')
+            bot.send_message(message.from_user.id, resp[1])
             return
+        case 'exc2':
+            logging.exception('Too big user prompt')
+            bot.send_message(message.from_user.id, resp[1]+'\nПопробуйте снова, но сократите размер своей части')
+            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_finish)
         case 'err':
             logging.error(f'Error: {resp[2]}')
             bot.register_next_step_handler_by_chat_id(message.chat.id)
