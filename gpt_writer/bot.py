@@ -66,7 +66,7 @@ def send_welcome(message: Message):
 
 
 @bot.message_handler(commands=['new_story', 'jump_to_active'])
-def new_story(message: Message):
+def new_old_story(message: Message):
     if message.text == '/new_story':
         if users[message.from_user.id].add_new_session() == 'exc':
             bot.send_message(message.from_user.id, 'К сожалению, ваш лимит сессий исчерпан')
@@ -154,28 +154,39 @@ def handle_additional(message: Message):
 
 
 def handle_story(message: Message):
-    users[message.from_user.id].current_session.save_prompt({'role': 'user', 'text': message.text})
-    resp = users[message.from_user.id].current_session.ask_gpt(message.text)
-    match resp[0]:
-        case 'exc':
-            logging.exception('Too big prompt')
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
-        case 'err':
-            logging.error(f'Error: {resp[2]}')
-        case 'succ':
-            logging.info(f'Response successful')
-    bot.send_message(message.from_user.id, resp[1])
-    if resp[0] == 'succ':
+    if message.text in ['/start', '/help']:
+        send_welcome(message)
+    elif message.text in ['new_session', '/jump_to_active']:
+        new_old_story(message)
+    elif message.text[0] == '/' and message.text not in ['/start', '/help', '/new_session', '/jump_to_active']:
+        bot.send_message(message.chat.id, 'Сейчас вы не можете использовать эту команду')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
+    else:
+        users[message.from_user.id].current_session.save_prompt({'role': 'user', 'text': message.text})
+        resp = users[message.from_user.id].current_session.ask_gpt(message.text)
+        match resp[0]:
+            case 'exc':
+                logging.exception('Too big prompt')
+                bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
+            case 'err':
+                logging.error(f'Error: {resp[2]}')
+            case 'succ':
+                logging.info(f'Response successful')
+        bot.send_message(message.from_user.id, resp[1])
+        if resp[0] == 'succ':
+            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
 
 
 def handle_continue(message: Message):
     if message.text == '/finish':
         bot.send_message(message.from_user.id, 'Отправьте свою часть истории')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_finish)
+    elif message.text in ['/start', '/help']:
+        send_welcome(message)
+    elif message.text in ['/new_session', '/jump_to_active']:
+        new_old_story(message)
     elif message.text[0] == '/':
-        bot.send_message(message.chat.id, 'Сейчас вы не можете применять никакие команды кроме '
-                                          '/finish чтобы нейросеть завершила рассказ после вашей части')
+        bot.send_message(message.chat.id, 'Сейчас вы не можете использовать эту команду')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
     else:
         handle_story(message)
@@ -196,7 +207,6 @@ def handle_finish(message: Message):
             logging.error(f'Error: {resp[2]}')
             bot.register_next_step_handler_by_chat_id(message.chat.id)
         case 'succ':
-            users[message.from_user.id].current_session.harakiri()
             logging.info(f'Response successful')
 
     bot.send_message(message.from_user.id, resp[1])

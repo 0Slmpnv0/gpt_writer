@@ -134,8 +134,11 @@ class Session:
             'завершить': 'Заверши рассказ, который ты составил вместе с пользователем'
         }
         sys_prompt = sys_prompts[resp_type]
+        ic(resp_type) 
+        ic(self.context)
         if self.additional:
             sys_prompt += f'\nТакже пользователь попросил учесть: {self.additional}'
+        ic(self.context)
         context_prompt_size = ''.join([prompt['text'] for prompt in self.context])
         if not self.context:
             self.tokens -= self.count_tokens(sys_prompt)
