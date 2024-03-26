@@ -107,7 +107,6 @@ class Session:
 
     def count_tokens(self, text) -> int:
         """Метод для подсчитывания токенов"""
-        ic(text)
         headers = {
             'Authorization': f'Bearer {iam}',
             'Content-Type': 'application/json'
@@ -117,13 +116,11 @@ class Session:
             "maxTokens": self.model_tokens,
             "text": text
         }
-        ic(data)
         tokens = requests.post(
             "https://llm.api.cloud.yandex.net/foundationModels/v1/tokenize",
             json=data,
             headers=headers
         ).json()['tokens']
-        ic(tokens)
         return len(tokens)
 
     def save_prompt(self, prompt):
@@ -146,17 +143,12 @@ class Session:
             'завершить': 'Заверши рассказ, который ты составил вместе с пользователем'
         }
         sys_prompt = sys_prompts[resp_type]
-        ic(resp_type)
-        ic(self.context)
         if self.additional:
             sys_prompt += f'\nТакже пользователь попросил учесть: {self.additional}'
-        ic(self.context)
         context_prompt_size = ''.join([prompt['text'] for prompt in self.context])
         if not self.context or sys_prompt == 'завершить':
             self.tokens -= self.count_tokens(sys_prompt)
         if self.count_tokens(prompt + context_prompt_size) > self.tokens:
-            ic(len(context_prompt_size))
-            ic(self.context)
             if self.count_tokens(context_prompt_size) > self.tokens:
                 self.harakiri()
                 return ['exc1', 'Извините, ваш рассказ получился слишком длинным, чтобы его продолжить.'
@@ -202,5 +194,4 @@ class Session:
     def harakiri(self):
         """Совершает харакири(удаляет себя из активных сессий)"""
         db.remove_session_context(self.uid, self.session_id)
-        ic(users[self.uid].active_sessions)
         users[self.uid].active_sessions.pop(self.session_id)

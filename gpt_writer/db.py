@@ -4,7 +4,6 @@ from icecream import ic
 
 
 def init_users() -> None:
-    ic('running in init_users')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
 
@@ -21,7 +20,6 @@ def init_users() -> None:
 
 
 def init_sessions() -> None:
-    ic('running in init_sessions')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
 
@@ -41,7 +39,6 @@ def init_sessions() -> None:
 
 
 def init_prompts() -> None:
-    ic('running in nit_prompts')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
 
@@ -60,20 +57,17 @@ def init_prompts() -> None:
 
 
 def get_uids() -> list[int]:
-    ic('running in get_uids')
     """Возвращает все user_id, у которых есть активные сессии"""
     return [int(resp['user_id']) for resp in execute_select_query('SELECT DISTINCT user_id FROM sessions')]
 
 
 def get_session_context(uid, sid):
-    ic('running in get_session_context')
     """Возвращает роль, и текст каждого промпта с заданными session_id и user_id по порядку"""
     return execute_select_query('SELECT role, text FROM prompts where user_id = ? and session_id = ? ORDER BY id',
                                 (uid, sid))
 
 
 def insert_into_users(user_id, session_total, admin, tokens_per_session) -> None:
-    ic('running in insert_into_users')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     sql = f'''INSERT 
@@ -86,7 +80,6 @@ def insert_into_users(user_id, session_total, admin, tokens_per_session) -> None
 
 
 def insert_into_prompts(user_id, session_id, role, content, tokens) -> None:
-    ic('running in insert_into_prompts')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     sql = f'''INSERT 
@@ -99,7 +92,6 @@ def insert_into_prompts(user_id, session_id, role, content, tokens) -> None:
 
 
 def insert_into_sessions(user_id, session_id) -> None:
-    ic('running in insert_into_session')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     sql = f'''INSERT 
@@ -111,7 +103,6 @@ def insert_into_sessions(user_id, session_id) -> None:
 
 
 def get_sessions(uid):
-    ic('running in get_sessions')
     """Возвращает список из пар session_id: {genre: asdf, additional: asdf, setting: asdf, chars: asdf}"""
     response = execute_select_query('''SELECT 
                                                     session_id, genre, additional, setting, chars 
@@ -129,7 +120,6 @@ def get_sessions(uid):
 
 
 def remove_session_context(uid, sid) -> None:
-    ic('running in remove_session_context')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     sql = 'DELETE FROM prompts WHERE user_id = ? AND session_id = ?'
@@ -139,14 +129,12 @@ def remove_session_context(uid, sid) -> None:
 
 
 def get_session_tokens(user_id: int):
-    ic('running in get_session_tokens')
     """Возвращает токены, которые остались для использования в сессии"""
     res = execute_select_query('SELECT tokens FROM prompts WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
     return res[0]['tokens'] if res else 0
 
 
 def update_sessions(uid, column, value, sid) -> None:
-    ic('running in update_sessions')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
@@ -162,7 +150,6 @@ def update_sessions(uid, column, value, sid) -> None:
 
 
 def update_users(uid, column, value) -> None:
-    ic('running in update_users')
     conn = sqlite3.connect('proj.db')
     cursor = conn.cursor()
     logging.debug('connected to proj.db successfully')
@@ -177,7 +164,6 @@ def update_users(uid, column, value) -> None:
 
 
 def execute_select_query(query, data=()) -> list[dict[int: list[str]]] | dict[int: list[str]]:
-    ic('running in execute_select_query')
     """Выполняет запросы, которые направлены на получение информации из БД.
     Написал чтобы сократить размеры всех функций, которые берут разное
     Принимает сам запрос, и data(если нужно)"""

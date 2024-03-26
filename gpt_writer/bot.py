@@ -207,16 +207,13 @@ def handle_chars(message: Message):
 def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
     chars = message.text.split(', ')
     available_chars = list(map(str, range(1, len(basic_chars)+1)))
-    ic(available_chars)
-    ic(chars)
-    ic(all(x in available_chars for x in chars))
     if not all(x in available_chars for x in chars):
         bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
     else:
         for char in chars:
-            users[message.from_user.id].current_session.chars += basic_chars[char - 1]
+            users[message.from_user.id].current_session.chars += basic_chars[int(char) - 1]
         db.update_sessions(message.from_user.id, 'chars', users[message.from_user.id].current_session.chars,
                            users[message.from_user.id].current_session.session_id)
         bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
