@@ -183,34 +183,23 @@ def handle_genre(message: Message):
     bot.send_message(message.from_user.id, ('Прекрасно! Теперь выберите, или напишите персонажей'))
     db.update_sessions(message.from_user.id, 'genre', message.text,
                        users[message.from_user.id].current_session.session_id)
+    bot.send_message(message.from_user.id, 'Вы хотите сами написать персонажей, или выбрать из готовых?',
+                     reply_markup=build_reply_kb(['Готовые', 'Cвои']))
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
 
 
-iteration = 0  # Как говорил Тиньков: Миш, мне @#*%# ! Я так чувствую!
-# (на самом деле только заметил необходимость предоставлять своих персов в тз, и решил особо не раздумывать,
-# а сделать как изначально в голову пришло, чтобы опять много времени не тратить. Устал уже от этого проекта.
-# А тут еще и персонажи. По изначальной задумке они тоже должны были быть(или не быть. Как юзер захочет) в additional)
-
-
 def handle_chars(message: Message):
-    global iteration
-    if not iteration:
-        bot.send_message(message.from_user.id, 'Вы хотите сами написать персонажей, или выбрать из готовых?',
+    if message.text not in ['Готовые', 'Cвои']:
+        bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
                          reply_markup=build_reply_kb(['Готовые', 'Cвои']))
-        iteration += 1
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
-    elif iteration == 1:
-        if message.text not in ['Готовые', 'Cвои']:
-            bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
-                             reply_markup=build_reply_kb(['Готовые', 'Cвои']))
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
-        elif message.text == 'Готовые':
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
-        elif message.text == 'Свои':
-            chars = "\n".join(basic_chars)
-            bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
-                                                   f'Персонажи:'+'\n'+chars)
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
+    elif message.text == 'Готовые':
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
+    elif message.text == 'Свои':
+        chars = "\n".join(basic_chars)
+        bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
+                                               f'Персонажи:'+'\n'+chars)
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
 
 
 def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
