@@ -207,6 +207,9 @@ def handle_chars(message: Message):
 def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
     chars = message.text.split(', ')
     available_chars = list(map(str, range(1, len(basic_chars)+1)))
+    ic(available_chars)
+    ic(chars)
+    ic(all(x in available_chars for x in chars))
     if all(x in available_chars for x in chars):
         bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')

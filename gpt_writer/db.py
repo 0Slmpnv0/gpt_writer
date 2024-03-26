@@ -124,7 +124,7 @@ def get_sessions(uid):
     else:
         return {
             response[0]['session_id']: [response[0]['genre'], response[0]['additional'], response[0]['setting'],
-                                        response[0]['char']]
+                                        response[0]['chars']]
         } if response else {}
 
 
