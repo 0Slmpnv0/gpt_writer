@@ -61,7 +61,7 @@ def init_prompts() -> None:
 
 def get_uids() -> list[int]:
     ic('running in get_uids')
-    """Возврщает все user_id, у которых есть активные сессии"""
+    """Возвращает все user_id, у которых есть активные сессии"""
     return [int(resp['user_id']) for resp in execute_select_query('SELECT DISTINCT user_id FROM sessions')]
 
 

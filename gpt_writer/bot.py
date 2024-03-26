@@ -61,9 +61,9 @@ for uid in uids:
                 continue
     else:  # Если сессия одна, то добавляю только ее
         sid = list(sessions.keys())[0]
-        genre, additional, setting = list(sessions.values())[0]
+        genre, additional, setting, chars = list(sessions.values())[0]
         users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                   additional=additional, tokens=db.get_session_tokens(uid))
+                                   additional=additional, tokens=db.get_session_tokens(uid), chars=chars)
         users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                            users[uid].active_sessions[
                                                                                sid].session_id))
