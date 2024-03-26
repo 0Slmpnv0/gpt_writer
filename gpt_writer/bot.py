@@ -193,9 +193,10 @@ def handle_chars(message: Message):
         bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
                          reply_markup=build_reply_kb(['Готовые', 'Cвои']))
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
-    elif message.text == 'Готовые':
-        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
     elif message.text == 'Свои':
+        bot.send_message(message.from_user.id, 'Отлично! Опишите всех своих персонажей в одном сообщении')
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
+    elif message.text == 'Готовые':
         chars = "\n".join(basic_chars)
         bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
                                                f'Персонажи:'+'\n'+chars)
@@ -211,6 +212,8 @@ def handle_basic_chars(message):  # если юзер хочет добавит�
     else:
         for char in basic_chars:
             users[message.from_user.id].current_session.chars += basic_chars[int(char) - 1]
+        db.update_sessions(message.from_user.id, 'chars', users[message.from_user.id].current_session.chars,
+                           users[message.from_user.id].current_session.session_id)
         bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
                                                 'Тут вы можете указать персонажей, которых хотели бы видеть в рассказе,'
                                                 ' форму рассказа(стих? обычное повествование?), и так далее.'
@@ -222,8 +225,8 @@ def handle_basic_chars(message):  # если юзер хочет добавит�
 
 
 def handle_own_chars(message: Message):  # если юзер хочет добавить своих персонажей
-    users[message.from_user.id].current_session.additional = message.text
-    db.update_sessions(message.from_user.id, 'additional', message.text,
+    users[message.from_user.id].current_session.chars = message.text
+    db.update_sessions(message.from_user.id, 'chars', message.text,
                        users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
 
