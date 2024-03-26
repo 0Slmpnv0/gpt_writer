@@ -207,8 +207,9 @@ def handle_chars(message: Message):
         elif message.text == 'Готовые':
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
         elif message.text == 'Свои':
+            chars = "\n".join(basic_chars)
             bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
-                                                   f'Персонажи:\n{"\n".join(basic_chars)}')
+                                                   f'Персонажи:'+'\n'+chars)
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
 
 
