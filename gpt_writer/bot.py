@@ -5,6 +5,7 @@ from telebot.types import Message
 from telebot import TeleBot
 from dotenv import get_key
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+from icecream import ic
 
 logging.basicConfig(filename='bot.log', level=logging.DEBUG)
 logging.debug('Bot startup initiated...')
@@ -204,7 +205,10 @@ def handle_chars(message: Message):
 
 
 def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
+    ic(message.text)
     chars = message.text.split(', ')
+    ic(chars)
+    ic(list(map(str, range(1, len(basic_chars)+1))))
     if chars not in list(map(str, range(1, len(basic_chars)+1))):
         bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
