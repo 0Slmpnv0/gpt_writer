@@ -1,28 +1,56 @@
-from icecream import ic
 import logging
 import db
 from gpt import User, users
-from utils import build_reply_kb
 from telebot.types import Message
 from telebot import TeleBot
 from dotenv import get_key
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 logging.basicConfig(filename='bot.log', level=logging.DEBUG)
 logging.debug('Bot startup initiated...')
+
 tg_token = get_key(".env", 'TELEGRAM_BOT_TOKEN')
-bot = TeleBot(tg_token)
+bot = TeleBot(tg_token)  # создание бота
+
 db.init_sessions()
 db.init_users()
-db.init_prompts()
-uids = db.get_uids()
+db.init_prompts()  # создаю все нужные таблицы для проекта
+
+basic_genres = ['Комедия', 'Хоррор', 'Триллер']
+basic_chars = [
+'''1. IT-специалист Макс
+Максу 25 лет, и большую часть жизни он посвятил инженерии. В то время как остальные подростки засиживались допоздна, играя в Fortnite и PUBG, Макс увлекался робототехникой и программированием.
+Сейчас это высокий стройный мужчина с короткими тёмными волосами. Он живёт в мегаполисе и работает в крупной IT-компании. В свободное время он любит посещать стендапы и заниматься виндсёрфингом. 
+Макс — добрый и отзывчивый человек с отличным чувством юмора. Он умеет находить общий язык со всеми, будь то коллеги или случайные знакомые. Макс всегда готов прийти на помощь и не боится рисковать ради своих друзей.
+''',
+'''2. Юная эльфийка Эмилия
+Эмилия — молодая эльфийка с длинными светлыми волосами, которые обрамляют её красивое лицо. Её большие зелёные глаза светятся мудростью и добротой. Она одета в лёгкое зелёное платье, которое подчёркивает её стройную фигуру и длинные ноги.
+Юная эльфийка обладает магическими способностями и умеет управлять силами природы. По своей натуре она невероятно добрая и отзывчивая, готова всегда прийти на помощь к тем, кто в ней нуждается. Она также очень умна и всегда стремится узнать что-то новое. 
+Эмилия мечтает найти своё место в мире и узнать больше о своих магических способностях!''',
+'''3. Дружелюбная стримерша Лера
+Лера — молодая девушка, известная в мире стримеров под ником ValeRun. У неё яркие голубые глаза, а улыбка всегда искренняя и тёплая. Длинные тёмные волосы она предпочитает подчёркивать утончённой и неброской одеждой в корейском стиле.
+Благодаря своей привлекательности, жизнерадостному настрою и харизме она быстро набрала популярность в категориях косплея и «Just Chatting». 
+За счёт прекрасного чувства юмора и заразительного смеха Леру часто приглашают быть ведущей крупных турниров по киберспорту. ''',
+'''4. Виртуозный кот Маркус
+Маркус — отважный и умный кот. Он родился с редким талантом к магии и со временем стал опытным волшебником. У этого рыжего пушистика сильное чувство справедливости и талант к игре на струнных инструментах.
+Дерзкий темперамент, немного высокомерия и острый язык делают Маркуса идеальным героем для приключений. В них он встречает множество друзей и врагов, сражается со злом и раскрывает древние тайны. '''
+]
+# тут просто дефолтные персонажи от яндекса
+
+
+MAX_USERS = 4
+uids = db.get_uids()  # беру из БД все телеграмовские user_id, чтобы для каждого юзера создать объект класса User
 for uid in uids:
-    User(uid)
-    sessions = db.get_sessions_with_ids(uid)
-    if type(sessions) == list:
+    User(uid)  # в __init__ прописано автоматическое добавление в словарь users пары user_id: self
+    sessions = db.get_sessions(uid)  # беру активные сессии, которые сохранены в БД
+    if type(sessions) == list:  # не придумал как сделать лучше.
+        # Если сессий несколько, то итерируюсь по ним и добавляю в self.active_sessions каждую.
         for session in sessions:
             if session:
                 sid = list(session.keys())[0]
-                genre, additional, setting = list(session.values())[0]
+                genre, additional, setting = list(session.values())[
+                    0]  # get_sessions возвращает словари sid: {genre: asdf, additional: asdf, setting: asdf} ...],
+                # или только один словарь
                 users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
                                            additional=additional, tokens=db.get_session_tokens(uid))
                 users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
@@ -30,7 +58,7 @@ for uid in uids:
                                                                                        sid].session_id))
             else:
                 continue
-    else:
+    else:  # Если сессия одна, то добавляю только ее
         sid = list(sessions.keys())[0]
         genre, additional, setting = list(sessions.values())[0]
         users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
@@ -40,15 +68,27 @@ for uid in uids:
                                                                                sid].session_id))
 
 
+def build_reply_kb(buttons: list) -> ReplyKeyboardMarkup:
+    kb = ReplyKeyboardMarkup()
+    for button in buttons:
+        kb.add(KeyboardButton(button))
+    return kb
+
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message: Message):
     if message.text == '/start':
         text = ('Добро пожаловать в GPT-сценариста! Бот позволяет вам совместно с yaGPT lite '
                 'писать сценарий на заданную вами тему. Всего вам будет доступно три сессии. '
                 'Чтобы начать новую сессию используйте /new_story')
-        if message.from_user.id not in users.keys():
-            User(message.from_user.id)
-            bot.send_message(message.from_user.id, text, reply_markup=build_reply_kb(['/new_story']))
+        if message.from_user.id not in users.keys():  # если пришел новый юзер, и лимит юзеров не исчерпан,
+            # то и его добавляю в users
+            if len(users) < MAX_USERS:
+                User(message.from_user.id)
+                db.insert_into_users(message.from_user.id, 0, 0, 1500)
+                bot.send_message(message.from_user.id, text, reply_markup=build_reply_kb(['/new_story']))
+            else:  # если исчерпан, то пользователь бесконечно попадает в looser, где его ждет одно и то же сообщение
+                looser(message)
         else:
             repl = ['/new_story']
             if users[message.from_user.id].active_sessions:
@@ -65,13 +105,19 @@ def send_welcome(message: Message):
         bot.send_message(message.chat.id, text)
 
 
+def looser(message: Message):
+    bot.send_message(message.from_user.id, 'К сожалению, лимит пользователей бота исчерпан. '
+                                           'Вы не можете отправлять запросы')
+    bot.register_next_step_handler_by_chat_id(message.chat.id, looser)
+
+
 @bot.message_handler(commands=['new_story', 'jump_to_active'])
 def new_old_story(message: Message):
     if message.text == '/new_story':
         if users[message.from_user.id].add_new_session() == 'exc':
             bot.send_message(message.from_user.id, 'К сожалению, ваш лимит сессий исчерпан')
         else:
-            db.insert_data('sessions', message.from_user.id, len(users[message.from_user.id].active_sessions))
+            db.insert_into_sessions(message.from_user.id, len(users[message.from_user.id].active_sessions))
             bot.send_message(message.from_user.id, 'Сессия добавлена! Теперь выберите сеттинг')
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_setting)
     else:
@@ -89,7 +135,7 @@ def handle_jumping(message: Message):
     try:
         if int(message.text) not in [session.session_id for session in
                                      users[message.from_user.id].active_sessions.values()]:
-            bot.send_message(message.from_user.id, 'Такой сесси нет. Пожалуйста, введите только ее номер без точки '
+            bot.send_message(message.from_user.id, 'Такой сессии нет. Пожалуйста, введите только ее номер без точки '
                                                    'Другие команды работать не будут',
                              reply_markup=build_reply_kb(
                                  [session.session_id for session in users[message.from_user.id].active_sessions]
@@ -125,7 +171,8 @@ def handle_jumping(message: Message):
 
 def handle_setting(message: Message):
     users[message.from_user.id].current_session.setting = message.text
-    bot.send_message(message.from_user.id, 'Отличный выбор! Теперь выберите жанр')
+    bot.send_message(message.from_user.id, 'Отличный выбор! Теперь выберите, или напишите жанр:',
+                     reply_markup=build_reply_kb(basic_genres))
     db.update_sessions(message.from_user.id, 'setting', message.text,
                        users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_genre)
@@ -133,19 +180,66 @@ def handle_setting(message: Message):
 
 def handle_genre(message: Message):
     users[message.from_user.id].current_session.genre = message.text
-    bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
-                                            'Тут вы можете указать персонажей, которых хотели бы видеть в рассказе, '
-                                            'форму рассказа(стих? обычное повествование? решать вам.), и так далее. '
-                                            'Можете попросить нейросеть не добавлять диалоги, '
-                                            'или не добавлять своих персонажей. Главное - сделайте текст лаконичным. '
-                                            'Каждый токен на счету! Если вам больше нечего сказать, то ставьте -'))
+    bot.send_message(message.from_user.id, ('Прекрасно! Теперь выберите, или напишите персонажей'))
     db.update_sessions(message.from_user.id, 'genre', message.text,
                        users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
 
 
+iteration = 0  # Как говорил Тиньков: Миш, мне @#*%# ! Я так чувствую!
+# (на самом деле только заметил необходимость предоставлять своих персов в тз, и решил особо не раздумывать,
+# а сделать как изначально в голову пришло, чтобы опять много времени не тратить. Устал уже от этого проекта.
+# А тут еще и персонажи. По изначальной задумке они тоже должны были быть(или не быть. Как юзер захочет) в additional)
+
+
+def handle_chars(message: Message):
+    global iteration
+    if not iteration:
+        bot.send_message(message.from_user.id, 'Вы хотите сами написать персонажей, или выбрать из готовых?',
+                         reply_markup=build_reply_kb(['Готовые', 'Cвои']))
+        iteration += 1
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
+    elif iteration == 1:
+        if message.text not in ['Готовые', 'Cвои']:
+            bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
+                             reply_markup=build_reply_kb(['Готовые', 'Cвои']))
+            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
+        elif message.text == 'Готовые':
+            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
+        elif message.text == 'Свои':
+            bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
+                                                   f'Персонажи:\n{"\n".join(basic_chars)}')
+            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
+
+
+def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
+    chars = message.text.split(', ')
+    if chars not in list(map(str, range(1, len(basic_chars)+1))):
+        bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
+                                               'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
+    else:
+        for char in basic_chars:
+            users[message.from_user.id].current_session.chars += basic_chars[int(char) - 1]
+        bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
+                                                'Тут вы можете указать персонажей, которых хотели бы видеть в рассказе,'
+                                                ' форму рассказа(стих? обычное повествование?), и так далее.'
+                                                ' Можете попросить нейросеть не добавлять диалоги, '
+                                                'или не добавлять своих персонажей. Главное - сделайте текст '
+                                                'лаконичным.'
+                                                ' Каждый токен на счету! Если вам больше нечего сказать, то ставьте -'))
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
+
+
+def handle_own_chars(message: Message):  # если юзер хочет добавить своих персонажей
+    users[message.from_user.id].current_session.additional = message.text
+    db.update_sessions(message.from_user.id, 'additional', message.text,
+                       users[message.from_user.id].current_session.session_id)
+    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
+
+
 def handle_additional(message: Message):
-    if message.text:
+    if message.text != '-':  # если доп инфа есть, то добавляем и ее
         users[message.from_user.id].current_session.additional = message.text
         db.update_sessions(message.from_user.id, 'additional', message.text,
                            users[message.from_user.id].current_session.session_id)
@@ -153,10 +247,10 @@ def handle_additional(message: Message):
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_story)
 
 
-def handle_story(message: Message):
+def handle_story(message: Message):  # отвечает за проверки всех команд, кроме /finish, отправку запросов в yaGPT
     if message.text in ['/start', '/help']:
         send_welcome(message)
-    elif message.text in ['new_session', '/jump_to_active']:
+    elif message.text in ['/new_session', '/jump_to_active']:
         new_old_story(message)
     elif message.text[0] == '/' and message.text not in ['/start', '/help', '/new_session', '/jump_to_active']:
         bot.send_message(message.chat.id, 'Сейчас вы не можете использовать эту команду')
@@ -177,22 +271,15 @@ def handle_story(message: Message):
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
 
 
-def handle_continue(message: Message):
+def handle_continue(message: Message):  # добавил чтобы удобно хендлить /finish
     if message.text == '/finish':
         bot.send_message(message.from_user.id, 'Отправьте свою часть истории')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_finish)
-    elif message.text in ['/start', '/help']:
-        send_welcome(message)
-    elif message.text in ['/new_session', '/jump_to_active']:
-        new_old_story(message)
-    elif message.text[0] == '/':
-        bot.send_message(message.chat.id, 'Сейчас вы не можете использовать эту команду')
-        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_continue)
     else:
         handle_story(message)
 
 
-def handle_finish(message: Message):
+def handle_finish(message: Message):  # Если юзер хочет закончить, то тут отвправляю в ask_gpt еще и resp_type
     resp = users[message.from_user.id].current_session.ask_gpt(message.text, 'завершить')
     match resp[0]:
         case 'exc1':
@@ -201,11 +288,10 @@ def handle_finish(message: Message):
             return
         case 'exc2':
             logging.exception('Too big user prompt')
-            bot.send_message(message.from_user.id, resp[1]+'\nПопробуйте снова, но сократите размер своей части')
+            bot.send_message(message.from_user.id, resp[1] + '\nПопробуйте снова, но сократите размер своей части')
             bot.register_next_step_handler_by_chat_id(message.chat.id, handle_finish)
         case 'err':
             logging.error(f'Error: {resp[2]}')
-            bot.register_next_step_handler_by_chat_id(message.chat.id)
         case 'succ':
             logging.info(f'Response successful')
 
