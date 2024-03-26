@@ -183,7 +183,7 @@ def handle_genre(message: Message):
     bot.send_message(message.from_user.id, ('Прекрасно! Теперь выберите, или напишите персонажей'))
     db.update_sessions(message.from_user.id, 'genre', message.text,
                        users[message.from_user.id].current_session.session_id)
-    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
+    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
 
 
 iteration = 0  # Как говорил Тиньков: Миш, мне @#*%# ! Я так чувствую!
