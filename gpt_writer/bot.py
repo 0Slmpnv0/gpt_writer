@@ -210,7 +210,7 @@ def handle_basic_chars(message):  # если юзер хочет добавит�
     ic(available_chars)
     ic(chars)
     ic(all(x in available_chars for x in chars))
-    if all(x in available_chars for x in chars):
+    if not all(x in available_chars for x in chars):
         bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
