@@ -49,11 +49,11 @@ for uid in uids:
         for session in sessions:
             if session:
                 sid = list(session.keys())[0]
-                genre, additional, setting = list(session.values())[
+                genre, additional, setting, chars = list(session.values())[
                     0]  # get_sessions возвращает словари sid: {genre: asdf, additional: asdf, setting: asdf} ...],
                 # или только один словарь
                 users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                           additional=additional, tokens=db.get_session_tokens(uid))
+                                           additional=additional, tokens=db.get_session_tokens(uid), chars=chars)
                 users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                                    users[uid].active_sessions[
                                                                                        sid].session_id))
