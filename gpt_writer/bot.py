@@ -215,8 +215,8 @@ def handle_basic_chars(message):  # если юзер хочет добавит�
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
     else:
-        for char in basic_chars:
-            users[message.from_user.id].current_session.chars += basic_chars[int(char) - 1]
+        for char in chars:
+            users[message.from_user.id].current_session.chars += basic_chars[char - 1]
         db.update_sessions(message.from_user.id, 'chars', users[message.from_user.id].current_session.chars,
                            users[message.from_user.id].current_session.session_id)
         bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
