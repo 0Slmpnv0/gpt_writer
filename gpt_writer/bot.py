@@ -5,6 +5,7 @@ from telebot.types import Message
 from telebot import TeleBot
 from dotenv import get_key
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+from icecream import ic
 
 logging.basicConfig(filename='bot.log', level=logging.DEBUG)
 logging.debug('Bot startup initiated...')
@@ -48,11 +49,11 @@ for uid in uids:
         for session in sessions:
             if session:
                 sid = list(session.keys())[0]
-                genre, additional, setting = list(session.values())[
+                genre, additional, setting, chars = list(session.values())[
                     0]  # get_sessions возвращает словари sid: {genre: asdf, additional: asdf, setting: asdf} ...],
                 # или только один словарь
                 users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                           additional=additional, tokens=db.get_session_tokens(uid))
+                                           additional=additional, tokens=db.get_session_tokens(uid), chars=chars)
                 users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                                    users[uid].active_sessions[
                                                                                        sid].session_id))
@@ -60,9 +61,9 @@ for uid in uids:
                 continue
     else:  # Если сессия одна, то добавляю только ее
         sid = list(sessions.keys())[0]
-        genre, additional, setting = list(sessions.values())[0]
+        genre, additional, setting, chars = list(sessions.values())[0]
         users[uid].add_old_session(session_id=sid, genre=genre, setting=setting,
-                                   additional=additional, tokens=db.get_session_tokens(uid))
+                                   additional=additional, tokens=db.get_session_tokens(uid), chars=chars)
         users[uid].active_sessions[sid].add_context(db.get_session_context(uid,
                                                                            users[uid].active_sessions[
                                                                                sid].session_id))
@@ -183,45 +184,38 @@ def handle_genre(message: Message):
     bot.send_message(message.from_user.id, ('Прекрасно! Теперь выберите, или напишите персонажей'))
     db.update_sessions(message.from_user.id, 'genre', message.text,
                        users[message.from_user.id].current_session.session_id)
-    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
-
-
-iteration = 0  # Как говорил Тиньков: Миш, мне @#*%# ! Я так чувствую!
-# (на самом деле только заметил необходимость предоставлять своих персов в тз, и решил особо не раздумывать,
-# а сделать как изначально в голову пришло, чтобы опять много времени не тратить. Устал уже от этого проекта.
-# А тут еще и персонажи. По изначальной задумке они тоже должны были быть(или не быть. Как юзер захочет) в additional)
+    bot.send_message(message.from_user.id, 'Вы хотите сами написать персонажей, или выбрать из готовых?',
+                     reply_markup=build_reply_kb(['Готовые', 'Cвои']))
+    bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
 
 
 def handle_chars(message: Message):
-    global iteration
-    if not iteration:
-        bot.send_message(message.from_user.id, 'Вы хотите сами написать персонажей, или выбрать из готовых?',
+    if message.text not in ['Готовые', 'Cвои']:
+        bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
                          reply_markup=build_reply_kb(['Готовые', 'Cвои']))
-        iteration += 1
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
-    elif iteration == 1:
-        if message.text not in ['Готовые', 'Cвои']:
-            bot.send_message(message.from_user.id, 'Просто тыкните на одну из кнопок',
-                             reply_markup=build_reply_kb(['Готовые', 'Cвои']))
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_chars)
-        elif message.text == 'Готовые':
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
-        elif message.text == 'Свои':
-            chars = "\n".join(basic_chars)
-            bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
-                                                   f'Персонажи:'+'\n'+chars)
-            bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
+    elif message.text == 'Свои':
+        bot.send_message(message.from_user.id, 'Отлично! Опишите всех своих персонажей в одном сообщении')
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_own_chars)
+    elif message.text == 'Готовые':
+        chars = "\n".join(basic_chars)
+        bot.send_message(message.from_user.id, 'Напишите через запятую с пробелом цифры нужных персонажей:'
+                                               f'Персонажи:'+'\n'+chars)
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
 
 
 def handle_basic_chars(message):  # если юзер хочет добавить наших персонажей
     chars = message.text.split(', ')
-    if chars not in list(map(str, range(1, len(basic_chars)+1))):
+    available_chars = list(map(str, range(1, len(basic_chars)+1)))
+    if not all(x in available_chars for x in chars):
         bot.send_message(message.from_user.id, 'Таких вариантов ответа нет. Пожалуйста, введите через запятую '
                                                'с пробелом цифры нужных персонажей(пример: 1, 2, 3)')
         bot.register_next_step_handler_by_chat_id(message.chat.id, handle_basic_chars)
     else:
-        for char in basic_chars:
+        for char in chars:
             users[message.from_user.id].current_session.chars += basic_chars[int(char) - 1]
+        db.update_sessions(message.from_user.id, 'chars', users[message.from_user.id].current_session.chars,
+                           users[message.from_user.id].current_session.session_id)
         bot.send_message(message.from_user.id, ('Превосходно! Осталось только написать дополнительную информацию. '
                                                 'Тут вы можете указать персонажей, которых хотели бы видеть в рассказе,'
                                                 ' форму рассказа(стих? обычное повествование?), и так далее.'
@@ -233,8 +227,8 @@ def handle_basic_chars(message):  # если юзер хочет добавит�
 
 
 def handle_own_chars(message: Message):  # если юзер хочет добавить своих персонажей
-    users[message.from_user.id].current_session.additional = message.text
-    db.update_sessions(message.from_user.id, 'additional', message.text,
+    users[message.from_user.id].current_session.chars = message.text
+    db.update_sessions(message.from_user.id, 'chars', message.text,
                        users[message.from_user.id].current_session.session_id)
     bot.register_next_step_handler_by_chat_id(message.chat.id, handle_additional)
 

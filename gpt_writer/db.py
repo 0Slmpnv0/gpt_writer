@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from icecream import ic
 
 
 def init_users() -> None:
@@ -56,7 +57,7 @@ def init_prompts() -> None:
 
 
 def get_uids() -> list[int]:
-    """Возврщает все user_id, у которых есть активные сессии"""
+    """Возвращает все user_id, у которых есть активные сессии"""
     return [int(resp['user_id']) for resp in execute_select_query('SELECT DISTINCT user_id FROM sessions')]
 
 
@@ -97,6 +98,8 @@ def insert_into_sessions(user_id, session_id) -> None:
                 INTO sessions (user_id, session_id)
                 VALUES (?, ?)'''
     cursor.execute(sql, (user_id, session_id))
+    conn.commit()
+    conn.close()
 
 
 def get_sessions(uid):
@@ -112,7 +115,7 @@ def get_sessions(uid):
     else:
         return {
             response[0]['session_id']: [response[0]['genre'], response[0]['additional'], response[0]['setting'],
-                                        response[0]['char']]
+                                        response[0]['chars']]
         } if response else {}
 
 
